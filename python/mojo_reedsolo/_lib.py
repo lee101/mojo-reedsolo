@@ -16,6 +16,7 @@ _SIGNATURES = {
     "mrs_encode": ([I] * 7, I),
     "mrs_syndromes": ([I] * 8, I),
     "mrs_poly_mul": ([I] * 7, I),
+    "mrs_generator_poly": ([I] * 6, I),
     "mrs_find_errors": ([I] * 7, I),
 }
 

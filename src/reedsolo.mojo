@@ -21,6 +21,22 @@ def poly_eval(log: BPtr, exp: BPtr, poly: BPtr, n: Int, x: Int) -> Int:
     return y
 
 
+def gf_mul_vector[W: Int](
+    values: SIMD[DType.uint8, W],
+    log_value: Int,
+    log: BPtr,
+    exp: BPtr,
+) -> SIMD[DType.uint8, W]:
+    var nonzero = values.ne(SIMD[DType.uint8, W](0))
+    var logs = log.gather[width=W](
+        values.cast[DType.int64](), mask=nonzero
+    )
+    return exp.gather[width=W](
+        logs.cast[DType.int64]() + SIMD[DType.int64, W](log_value),
+        mask=nonzero,
+    )
+
+
 def find_errors_simd(
     err_loc: BPtr,
     err_len: Int,
@@ -191,6 +207,51 @@ def mrs_poly_mul(
                     dst[i + j] = dst[i + j] ^ exp[Int(log[pv]) + lq]
                 i += 1
     return n
+
+
+@export("mrs_generator_poly")
+def mrs_generator_poly(
+    nsym: Int,
+    fcr: Int,
+    generator: Int,
+    log_addr: Int,
+    exp_addr: Int,
+    dst_addr: Int,
+) abi("C") -> Int:
+    if (
+        log_addr == 0
+        or exp_addr == 0
+        or dst_addr == 0
+        or nsym < 0
+        or nsym >= 255
+    ):
+        return -1
+    var log = BPtr(unsafe_from_address=log_addr)
+    var exp = BPtr(unsafe_from_address=exp_addr)
+    var dst = BPtr(unsafe_from_address=dst_addr)
+    dst[0] = 1
+    comptime W = simd_width_of[DType.float64]()
+    for i in range(nsym):
+        var root = gf_pow(log, exp, generator, i + fcr)
+        var log_root = Int(log[root])
+        dst[i + 1] = 0
+        var end = i + 2
+        while end - W >= 1:
+            var start = end - W
+            var current = dst.load[width=W](start)
+            var previous = dst.load[width=W](start - 1)
+            dst.store(
+                start,
+                current ^ gf_mul_vector(previous, log_root, log, exp),
+            )
+            end = start
+        var j = end - 1
+        while j >= 1:
+            var previous = Int(dst[j - 1])
+            if previous != 0:
+                dst[j] = dst[j] ^ exp[Int(log[previous]) + log_root]
+            j -= 1
+    return nsym + 1
 
 
 @export("mrs_find_errors")

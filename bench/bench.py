@@ -91,6 +91,33 @@ def main():
     rt, _ = best_time(reference_correct)
     row("correct 100 blocks, 8 errors", mt, rt)
 
+    p = bytearray((i * 43 + 7) % 256 for i in range(9))
+    q = bytearray([9, 0, 117, 3, 201])
+
+    def mojo_poly_mul():
+        for _ in range(10_000):
+            mojo.gf_poly_mul(p, q)
+
+    def reference_poly_mul():
+        for _ in range(10_000):
+            reference.gf_poly_mul(p, q)
+
+    mt, _ = best_time(mojo_poly_mul)
+    rt, _ = best_time(reference_poly_mul)
+    row("multiply 9x5 polynomials, 10k calls", mt, rt)
+
+    def mojo_codec_init():
+        for _ in range(1_000):
+            mojo.RSCodec(32)
+
+    def reference_codec_init():
+        for _ in range(1_000):
+            reference.RSCodec(32)
+
+    mt, _ = best_time(mojo_codec_init)
+    rt, _ = best_time(reference_codec_init)
+    row("construct 1k codecs, 32 ECC", mt, rt)
+
 
 if __name__ == "__main__":
     main()

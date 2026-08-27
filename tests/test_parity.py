@@ -167,7 +167,7 @@ def test_polynomial_helpers_match_upstream():
     assert mojo.gf_neg(91) == upstream.gf_neg(91)
 
 
-@pytest.mark.parametrize("p_len", [1, 3, 4, 5, 9])
+@pytest.mark.parametrize("p_len", [1, 3, 4, 5, 9, 13, 16, 17])
 def test_simd_polynomial_multiply_tail_matches_upstream(p_len):
     reset()
     p = bytearray((i * 43 + 7) % 256 for i in range(p_len))
@@ -179,6 +179,12 @@ def test_generator_polynomials_match_upstream():
     reset()
     assert mojo.rs_generator_poly(32) == upstream.rs_generator_poly(32)
     assert mojo.rs_generator_poly_all(20) == upstream.rs_generator_poly_all(20)
+
+
+@pytest.mark.parametrize("nsym", [0, 1, 7, 8, 9, 31, 32, 64])
+def test_simd_generator_polynomial_tail_matches_upstream(nsym):
+    reset()
+    assert mojo.rs_generator_poly(nsym) == upstream.rs_generator_poly(nsym)
 
 
 def test_prime_and_non_lut_helpers_match_upstream():
@@ -268,6 +274,7 @@ def test_ffi_exports_reject_null_pointers():
     assert native.mrs_encode(0, 1, 2, 0, 0, 0, 0) < 0
     assert native.mrs_syndromes(0, 1, 2, 0, 2, 0, 0, 0) < 0
     assert native.mrs_poly_mul(0, 1, 0, 1, 0, 0, 0) < 0
+    assert native.mrs_generator_poly(1, 0, 2, 0, 0, 0) < 0
     assert native.mrs_find_errors(0, 1, 1, 2, 0, 0, 0) < 0
 
 

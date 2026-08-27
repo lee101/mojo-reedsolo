@@ -147,13 +147,30 @@ def gf_poly_add(p, q):
 
 def gf_poly_mul(p, q):
     if field_charac == 255:
-        pa = _u8_table(p, "p")
-        qa = _u8_table(q, "q")
-        if not len(pa) or not len(qa):
+        p_buffer = isinstance(p, (bytes, bytearray))
+        q_buffer = isinstance(q, (bytes, bytearray))
+        p_len = len(p) if p_buffer else len(_u8_table(p, "p"))
+        q_len = len(q) if q_buffer else len(_u8_table(q, "q"))
+        if not p_len or not q_len:
             return bytearray()
+        if p_len * q_len <= 64:
+            pv = p if p_buffer else bytearray(_u8_table(p, "p"))
+            qv = q if q_buffer else bytearray(_u8_table(q, "q"))
+            result = bytearray(p_len + q_len - 1)
+            log_p = [gf_log[value] for value in pv]
+            for j, value_q in enumerate(qv):
+                if value_q:
+                    log_q = gf_log[value_q]
+                    for i, value_p in enumerate(pv):
+                        if value_p:
+                            result[i + j] ^= gf_exp[log_p[i] + log_q]
+            return result
+        pa = np.frombuffer(p, dtype=np.uint8) if p_buffer else _u8_table(p, "p")
+        qa = np.frombuffer(q, dtype=np.uint8) if q_buffer else _u8_table(q, "q")
         logs = np.frombuffer(gf_log, dtype=np.uint8)
         exps = np.frombuffer(gf_exp, dtype=np.uint8)
-        dst = np.empty(len(pa) + len(qa) - 1, dtype=np.uint8)
+        result = bytearray(len(pa) + len(qa) - 1)
+        dst = np.frombuffer(result, dtype=np.uint8)
         status = lib().mrs_poly_mul(
             pa.ctypes.data,
             len(pa),
@@ -165,7 +182,7 @@ def gf_poly_mul(p, q):
         )
         if status != len(dst):
             raise RuntimeError("Mojo polynomial multiplication failed")
-        return bytearray(dst)
+        return result
     result = _bytearray(len(p) + len(q) - 1)
     for j, qv in enumerate(q):
         if qv:
@@ -214,6 +231,22 @@ def gf_poly_eval(poly, x):
 
 
 def rs_generator_poly(nsym, fcr=0, generator=2):
+    if field_charac == 255 and 0 <= nsym < 255:
+        result = bytearray(nsym + 1)
+        dst = np.frombuffer(result, dtype=np.uint8)
+        logs = np.frombuffer(gf_log, dtype=np.uint8)
+        exps = np.frombuffer(gf_exp, dtype=np.uint8)
+        status = lib().mrs_generator_poly(
+            nsym,
+            fcr,
+            generator,
+            logs.ctypes.data,
+            exps.ctypes.data,
+            dst.ctypes.data,
+        )
+        if status != len(result):
+            raise ValueError("invalid Reed-Solomon generator parameters")
+        return result
     result = _bytearray([1])
     for i in range(nsym):
         result = gf_poly_mul(result, [1, gf_pow(generator, i + fcr)])
@@ -265,7 +298,8 @@ def rs_encode_msg(msg_in, nsym, fcr=0, generator=2, gen=None):
         raise ValueError("gen must contain at least nsym + 1 coefficients")
     logs = _u8_table(gf_log)
     exps = _u8_table(gf_exp)
-    dst = np.empty(len(msg) + nsym, dtype=np.uint8)
+    result = bytearray(len(msg) + nsym)
+    dst = np.frombuffer(result, dtype=np.uint8)
     status = lib().mrs_encode(
         msg.ctypes.data,
         len(msg),
@@ -277,7 +311,7 @@ def rs_encode_msg(msg_in, nsym, fcr=0, generator=2, gen=None):
     )
     if status < 0:
         raise ValueError("invalid Reed-Solomon encoding parameters")
-    return bytearray(dst)
+    return result
 
 
 def rs_simple_encode_msg(msg_in, nsym, fcr=0, generator=2, gen=None):

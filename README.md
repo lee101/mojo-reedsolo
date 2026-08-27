@@ -75,10 +75,12 @@ Machine: Intel(R) Xeon(R) CPU E5-2697 v4 @ 2.30GHz; Linux 6.8.0-136-generic
 
 | operation | mojo-reedsolo | reedsolo 1.7.0 | speedup |
 | --- | ---: | ---: | ---: |
-| encode 256 KiB, 32 ECC | 26.25 ms | 1440.21 ms | 54.86x |
-| check 292.75 KiB codeword | 83.88 ms | 2536.78 ms | 30.24x |
-| decode clean 292.75 KiB | 68.54 ms | 2532.18 ms | 36.95x |
-| correct 100 blocks, 8 errors | 45.78 ms | 387.01 ms | 8.45x |
+| encode 256 KiB, 32 ECC | 23.83 ms | 1298.37 ms | 54.49x |
+| check 292.75 KiB codeword | 57.58 ms | 2005.72 ms | 34.83x |
+| decode clean 292.75 KiB | 60.01 ms | 2014.57 ms | 33.57x |
+| correct 100 blocks, 8 errors | 42.26 ms | 431.22 ms | 10.20x |
+| multiply 9x5 polynomials, 10k calls | 76.73 ms | 77.80 ms | 1.01x |
+| construct 1k codecs, 32 ECC | 151.33 ms | 374.30 ms | 2.47x |
 
 Run the benchmark on your own machine with:
 
@@ -90,9 +92,11 @@ pixi run bench
 
 Encoding uses extended synthetic division over GF(256); checking and the clean
 decode path evaluate syndrome polynomials. Those nested loops run in one Mojo
-compilation unit. Chien search evaluates independent candidate roots with SIMD
-gathers and a scalar tail in Mojo. Polynomial multiplication uses the same SIMD
-width with unaligned-safe loads, stores, and a scalar tail. Berlekamp-Massey and
+compilation unit. Generator construction crosses the native boundary once and
+updates independent coefficient ranges with SIMD gathers, unaligned-safe loads
+and stores, and a scalar tail. Chien search uses the same SIMD width. Large
+polynomial products use a native SIMD kernel, while tiny products stay on a
+validated serial CPU path to avoid FFI setup overhead. Berlekamp-Massey and
 Forney correction keep their short per-codeword control flow in Python.
 
 There is intentionally no threaded or GPU path. GF(256) codewords are capped at
@@ -107,8 +111,9 @@ passes their addresses as integer values through a small C ABI; Mojo validates
 the addresses and lengths before reconstructing pointers. Bytes, bytearrays,
 compatible memoryviews, and field tables use zero-copy NumPy views. Other
 integer sequences are range-checked and copied to contiguous `uint8` arrays.
-Local references keep every buffer alive for the synchronous call. The shared
-library neither allocates nor retains Python-owned memory.
+Native output is written directly into its final Python `bytearray`. Local
+references keep every buffer alive for the synchronous call. The shared library
+neither allocates nor retains Python-owned memory.
 
 ## Development
 
